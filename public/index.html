@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<h3>Load Profile</h3>
+
+Page to Start -> <input type="number" id="startPage" value="1" /> <br />
+<button type="button" id="btnTest" onclick="WebSocketTest();">FETCH</button> <br />
+
+<iframe id="frmMain" style="height: 200px; height: 300px; display: none;" src="/welcome"></iframe>
+
+<div id="dvMon" style="border: solid 1px red; width: 100vw;"></div>
+
+
+
+<script type = "text/javascript">
+
+
+
+
+    const wsPort = Number(location.port) + 1;
+
+
+    // exec|page|
+
+    function WebSocketTest() {
+
+
+
+        if ("WebSocket" in window) {
+
+
+            // Let us open a web socket
+            const ws = new WebSocket(`ws://localhost:${wsPort}`);
+
+            ws.onopen = function() {
+
+                // Web Socket is connected, send data using send()
+                const ele = document.createElement("p");
+                ele.innerText = "connected";
+
+                dvMon.prepend(ele);
+            };
+
+            ws.onmessage = function (evt) {
+
+                var received_msg = evt.data;
+                // alert("Message is received...");
+
+                const ele = document.createElement("p");
+                ele.innerText = received_msg;
+                console.log(received_msg)
+                dvMon.prepend(ele);
+
+                if (received_msg.startsWith("exec|page")){
+
+                    dvMon.innerHTML = '';
+
+                    const nextPage = received_msg.match(/\d*$/g)[0];
+                    document.getElementById("startPage").value = nextPage;
+                    document.title = "Fetching : " + nextPage;
+                    const note = `http://localhost:${location.port}/resumes/lists/${nextPage}`;
+                    console.log(note);
+                    // window.open(note,"_blank");
+
+                    document.getElementById("frmMain").src = `http://localhost:${location.port}/resumes/lists/${nextPage}`;
+                    document.getElementById('frmMain').contentWindow.location.reload();
+                }
+
+            };
+
+            ws.onclose = function() {
+
+                const ele = document.createElement("p");
+                ele.innerText = "connection closed";
+
+                dvMon.prepend(ele);
+            };
+        } else {
+
+            // The browser doesn't support WebSocket
+            alert("WebSocket NOT supported by your Browser!");
+        }
+
+        const testPage = Number(document.getElementById("startPage").value);
+        document.getElementById("frmMain").src = `http://localhost:${location.port}/resumes/lists/${testPage}`;
+        document.getElementById('frmMain').contentWindow.location.reload();
+    }
+</script>
+
+</body>
+</html>
