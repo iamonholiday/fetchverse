@@ -63,8 +63,7 @@ Page to Start -> <input type="number" id="startPage" value="1" /> <br />
                     console.log(note);
                     // window.open(note,"_blank");
 
-                    document.getElementById("frmMain").src = `http://localhost:${location.port}/resumes/lists/${nextPage}`;
-                    document.getElementById('frmMain').contentWindow.location.reload();
+                    window.open(`http://localhost:${location.port}/resumes/lists/${nextPage}`, "_blank")
                 }
 
             };
@@ -83,8 +82,7 @@ Page to Start -> <input type="number" id="startPage" value="1" /> <br />
         }
 
         const testPage = Number(document.getElementById("startPage").value);
-        document.getElementById("frmMain").src = `http://localhost:${location.port}/resumes/lists/${testPage}`;
-        document.getElementById('frmMain').contentWindow.location.reload();
+        window.open(`http://localhost:${location.port}/resumes/lists/${testPage}`,"_blank");
     }
 </script>
 

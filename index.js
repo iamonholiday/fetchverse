@@ -38,143 +38,146 @@ const SHARED_OPTIONS = process.env.HTTP_OPTION;
 
 const WebSocket = require('ws')
 
-const wss = new WebSocket.Server({ port: wsPort })
+const wss = new WebSocket.Server({ port: wsPort });
+
+let boardcast = null;
 
 wss.on('connection', ws => {
 
+    boardcast = ws;
     ws.on('message', message => {
         console.log(`Received message => ${message}`)
     })
 
-    app.get(`/resumes/preview_new/:profileId`,async (req, res) => {
+
+})
+
+app.get(`/resumes/preview_new/:profileId`,async (req, res) => {
 
 
-        const profileId = req.params.profileId;
-        const fetchUrl = `https://www.jobbkk.com/resumes/preview_new/${profileId}`;
-        const saveHtmlPath = `./public/loaded/full_${profileId}.htm`;
+    const profileId = req.params.profileId;
+    const fetchUrl = `https://www.jobbkk.com/resumes/preview_new/${profileId}`;
+    const saveHtmlPath = `./public/loaded/full_${profileId}.htm`;
 
-        const respBody = await udfFetch(fetchUrl, SHARED_OPTIONS);
+    const respBody = await udfFetch(fetchUrl, SHARED_OPTIONS);
 
-        let $ = cheerio.load(respBody);
-        let html = $('section.container-print').html();
+    let $ = cheerio.load(respBody);
+    let html = $('section.container-print').html();
 
 
 
+    await new Promise((resolve, reject) => {
+
+        fs.writeFile(saveHtmlPath, html,(err) => {
+
+            if (err) throw err;
+            const note = `html saved|${profileId}`;
+            console.log(note);
+
+            resolve();
+        });
+    });
+
+
+
+
+    res.send("loaded profile|" + profileId);
+
+});
+
+app.get(`/resumes/lists/:pageStart`,async (req, res) => {
+
+
+    const logFileName = './data/fetch-log.csv';
+
+    const startPage = Number.parseInt(req.params.pageStart);
+
+
+
+    const listUrl = `https://www.jobbkk.com/resumes/lists/${startPage}`;
+    const respBody = await udfFetch(listUrl, SHARED_OPTIONS);
+    let $ = cheerio.load(respBody);
+
+    const nData = [];
+    const allJobs = [...$('div.list-job-search')];
+    for (const iJob of allJobs){
+
+        const iShortHtml = $.html(iJob);
+        const $_data = cheerio.load($.html(iJob)); // cheerio.load(iJob.html());
+        let prf = _.uniqBy(
+            [...$_data(".clickShowDetail")].map((ie) => (
+                {
+                    page : startPage,
+                    link : ie.attribs.href,
+                    profileId : ie.attribs.href.match(/\d*$/g)[0],
+                    imgUrl : $_data("img").attr("src")
+                }
+            )),
+            (ie) => {
+
+                return ie.profileId
+            }
+        )[0];
+
+
+
+
+        nData.push(prf);
+
+        // write short resume
         await new Promise((resolve, reject) => {
 
-            fs.writeFile(saveHtmlPath, html,(err) => {
+            const saveShortPath = `./public/loaded/short_${prf.profileId}.htm`;
+            fs.writeFile(saveShortPath, iShortHtml,(err) => {
 
                 if (err) throw err;
-                const note = `html saved|${profileId}`;
+                const note = `short html saved|${prf.profileId}`;
                 console.log(note);
-
+                boardcast.send(`${(startPage)}|saved short|${listUrl}|${saveShortPath}.html`);
                 resolve();
             });
         });
 
 
+        // write full resume
+        const fetchResumeUrl = `http://localhost:${port}/resumes/preview_new/${prf.profileId}`;
+        await udfFetch(fetchResumeUrl, SHARED_OPTIONS);
+        boardcast.send(`${(startPage)}|saved full|${fetchResumeUrl}|${prf.profileId}.html`);
 
 
-        res.send("loaded profile|" + profileId);
+        // write pic
+        let pic = prf.imgUrl;
+        await new Promise((resolve, reject) => {
 
-    });
+            const picSavePath = `./public/loaded/pic_${prf.profileId}.jpg`;
+            download(pic, picSavePath, function(){
 
-    app.get(`/resumes/lists/:pageStart`,async (req, res) => {
-
-
-        const logFileName = './data/fetch-log.csv';
-
-        const startPage = Number.parseInt(req.params.pageStart);
-
-
-
-        const listUrl = `https://www.jobbkk.com/resumes/lists/${startPage}`;
-        const respBody = await udfFetch(listUrl, SHARED_OPTIONS);
-        let $ = cheerio.load(respBody);
-
-        const nData = [];
-        const allJobs = [...$('div.list-job-search')];
-        for (const iJob of allJobs){
-
-            const iShortHtml = $.html(iJob);
-            const $_data = cheerio.load($.html(iJob)); // cheerio.load(iJob.html());
-            let prf = _.uniqBy(
-                [...$_data(".clickShowDetail")].map((ie) => (
-                    {
-                        page : startPage,
-                        link : ie.attribs.href,
-                        profileId : ie.attribs.href.match(/\d*$/g)[0],
-                        imgUrl : $_data("img").attr("src")
-                    }
-                )),
-                (ie) => {
-
-                    return ie.profileId
-                }
-            )[0];
-
-
-
-
-            nData.push(prf);
-
-            // write short resume
-            await new Promise((resolve, reject) => {
-
-                const saveShortPath = `./public/loaded/short_${prf.profileId}.htm`;
-                fs.writeFile(saveShortPath, iShortHtml,(err) => {
-
-                    if (err) throw err;
-                    const note = `short html saved|${prf.profileId}`;
-                    console.log(note);
-                    ws.send(`${(startPage)}|saved short|${listUrl}|${saveShortPath}.html`);
-                    resolve();
-                });
+                const note = `${startPage}|saved image|${pic}|${picSavePath}`;
+                console.log(note);
+                boardcast.send(note)
+                resolve();
             });
-
-
-            // write full resume
-            const fetchResumeUrl = `http://localhost:${port}/resumes/preview_new/${prf.profileId}`;
-            await udfFetch(fetchResumeUrl, SHARED_OPTIONS);
-            ws.send(`${(startPage)}|saved full|${fetchResumeUrl}|${prf.profileId}.html`);
-
-
-            // write pic
-            let pic = prf.imgUrl;
-            await new Promise((resolve, reject) => {
-
-                const picSavePath = `./public/loaded/pic_${prf.profileId}.jpg`;
-                download(pic, picSavePath, function(){
-
-                    const note = `${startPage}|saved image|${pic}|${picSavePath}`;
-                    console.log(note);
-                    ws.send(note)
-                    resolve();
-                });
-            });
-
-        }
-
-
-
-
-        const writeJrny = new ObjectsToCsv(nData);
-        await writeJrny.toDisk(logFileName,{ append: true });
-
-
-        ws.send(`exec|page|${(startPage + 1)}`);
-
-
-
-
-        fs.readFile(__dirname + '/public/finish.html', 'utf8', (err, text) => {
-            res.send(text);
         });
 
+    }
+
+
+
+
+    const writeJrny = new ObjectsToCsv(nData);
+    await writeJrny.toDisk(logFileName,{ append: true });
+
+
+    boardcast.send(`exec|page|${(startPage + 1)}`);
+
+
+
+
+    fs.readFile(__dirname + '/public/finish.html', 'utf8', (err, text) => {
+        res.send(text);
     });
 
-})
-
+});
 
 app.get('/welcome', (req, res) => {
 
